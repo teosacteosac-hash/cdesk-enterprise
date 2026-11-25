@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDESK Enterprise - Sistema de Gestión de Tareas</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS SDK v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        obsidian: '#0b0f19',
+                        charcoal: '#111827',
+                        slateframe: '#1e293b',
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.35); border-radius: 9999px; border: 1px solid rgba(148, 163, 184, 0.15); }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.65); }
+        .kanban-col-drag-over { background-color: rgba(59, 130, 246, 0.12) !important; border: 2px dashed #60a5fa !important; box-shadow: 0 0 25px rgba(59, 130, 246, 0.25) !important; }
+        .photo-dropzone-active { background-color: rgba(99, 102, 241, 0.14) !important; border-color: #818cf8 !important; transform: scale(0.995); }
+        .task-card-dragging { opacity: 0.55; transform: scale(0.98); }
+        .dark .framed-panel { box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06); }
+        .dark .framed-card { box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.05); }
+        @media print {
+            header, #toolbarSection, #toastContainer, #lightboxModal, #authScreen { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .framed-panel, .framed-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; break-inside: avoid; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 dark:bg-[#0b0f19] dark:text-slate-100 font-sans antialiased transition-colors duration-200 min-h-screen flex flex-col">
+
+    <!-- ===================================================================== -->
+    <!-- PANTALLA DE AUTENTICACIÓN (REGISTRO E INICIO DE SESIÓN POR USUARIO)   -->
+    <!-- ===================================================================== -->
+    <div id="authScreen" class="fixed inset-0 z-50 bg-slate-100 dark:bg-[#0b0f19] flex items-center justify-center p-4 overflow-y-auto">
+        <div class="max-w-md w-full framed-panel bg-white dark:bg-[#111827] rounded-2xl border-2 border-slate-300 dark:border-slate-700 p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div class="flex flex-col items-center text-center space-y-2">
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-3 rounded-2xl border border-blue-400/40 shadow-lg shadow-blue-600/25">
+                    <i data-lucide="check-square" class="w-8 h-8"></i>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                    CADESK <span class="text-blue-600 dark:text-indigo-400">Enterprise</span>
+                </h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Acceso multiusuario en la nube • Cada cuenta almacena sus propios proyectos y evidencias
+                </p>
+            </div>
+
+            <!-- Tabs Login / Registro -->
+            <div class="grid grid-cols-2 rounded-xl bg-slate-100 dark:bg-[#0b0f19] p-1 border border-slate-300 dark:border-slate-700">
+                <button type="button" id="tabLoginBtn" onclick="switchAuthTab('login')" class="py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white dark:bg-[#1e293b] text-blue-600 dark:text-indigo-300 border border-slate-200 dark:border-slate-600 shadow-xs transition-all">
+                    Iniciar Sesión
+                </button>
+                <button type="button" id="tabRegisterBtn" onclick="switchAuthTab('register')" class="py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-transparent transition-all">
+                    Registrarse
+                </button>
+            </div>
+
+            <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div id="registerNameWrapper" class="hidden">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">Nombre completo o cargo</label>
+                    <input type="text" id="authFullName" placeholder="Ej. Ing. Wilson Mendoza" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">Correo electrónico *</label>
+                    <input type="email" id="authEmail" required placeholder="usuario@empresa.com" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">Contraseña *</label>
+                    <input type="password" id="authPassword" required minlength="6" placeholder="Mínimo 6 caracteres" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div id="authErrorBox" class="hidden p-3 rounded-xl bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-700 text-xs text-rose-700 dark:text-rose-300"></div>
+                <div id="authSuccessBox" class="hidden p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-700 dark:text-emerald-300"></div>
+
+                <button type="submit" id="authSubmitBtn" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm border border-blue-400/30 shadow-md transition-all cursor-pointer flex items-center justify-center gap-2">
+                    <i data-lucide="log-in" class="w-4 h-4"></i>
+                    <span id="authSubmitLabel">Ingresar a mi espacio</span>
+                </button>
+            </form>
+
+            <!-- Aviso de configuración de Supabase -->
+            <div id="supabaseConfigWarning" class="hidden p-3 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                <p class="font-bold">Configuración de Supabase pendiente:</p>
+                <p>Pega tu <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> al inicio del bloque <code>&lt;script&gt;</code> para habilitar el registro en la nube.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- APLICACIÓN PRINCIPAL (VISIBLE SOLO CUANDO EL USUARIO INICIA SESIÓN)   -->
+    <!-- ===================================================================== -->
+    <div id="appShell" class="hidden flex-1 flex flex-col">
+        <!-- Barra de Navegación Superior -->
+        <header class="bg-white dark:bg-[#111827]/95 backdrop-blur-md border-b-2 border-slate-200 dark:border-slate-700/80 sticky top-0 z-30 shadow-md dark:shadow-black/50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-2 rounded-xl border border-blue-400/40 shadow-lg shadow-blue-600/25">
+                        <i data-lucide="check-square" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none flex items-center gap-2">
+                            CADESK <span class="text-blue-600 dark:text-indigo-400">Enterprise</span>
+                            <span class="hidden md:inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">Cloud Sync</span>
+                        </h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block mt-0.5">Gestión integral de proyectos, tiempo, estados y Registros fotográficos</p>
+                    </div>
+                </div>
+
+                <!-- Acciones Globales + Usuario Conectado -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <!-- Indicador de usuario autenticado -->
+                    <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-[#1e293b] border border-slate-300 dark:border-slate-600 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="currentUserEmailLabel" class="font-medium text-slate-700 dark:text-slate-200 max-w-[180px] truncate">usuario@correo.com</span>
+                    </div>
+
+                    <button onclick="openTaskModal()" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border border-blue-400/30 shadow-md shadow-blue-900/30 transition-all cursor-pointer">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Nueva Tarea</span>
+                        <span class="sm:hidden">Crear</span>
+                    </button>
+
+                    <!-- Menú de Datos -->
+                    <div class="relative" id="dataMenuContainer">
+                        <button onclick="toggleDataMenu()" title="Gestión de Datos" class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-white dark:bg-[#1e293b] hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 text-sm font-medium shadow-xs">
+                            <i data-lucide="database" class="w-4 h-4 text-indigo-500 dark:text-indigo-400"></i>
+                            <span class="hidden md:inline">Datos</span>
+                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-70"></i>
+                        </button>
+                        <div id="dataMenuDropdown" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-white dark:bg-[#111827] shadow-2xl border border-slate-300 dark:border-slate-600/90 py-1.5 z-40 text-sm">
+                            <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+                                <div class="font-semibold text-slate-700 dark:text-slate-200 truncate" id="dropdownUserEmail">usuario@correo.com</div>
+                                <div class="text-emerald-600 dark:text-emerald-400 mt-0.5">Sincronizado en la nube</div>
+                            </div>
+                            <button onclick="syncFromCloud(true)" class="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800/90 flex items-center gap-2.5 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 text-indigo-500"></i>
+                                Sincronizar ahora
+                            </button>
+                            <button onclick="exportToCSV()" class="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800/90 flex items-center gap-2.5 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-500"></i>
+                                Exportar Reporte CSV
+                            </button>
+                            <button onclick="exportToJSON()" class="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800/90 flex items-center gap-2.5 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="download" class="w-4 h-4 text-blue-500"></i>
+                                Respaldar JSON (c/ Fotos)
+                            </button>
+                            <label class="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800/90 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 cursor-pointer">
+                                <i data-lucide="upload" class="w-4 h-4 text-indigo-400"></i>
+                                Importar JSON a mi cuenta
+                                <input type="file" id="importJsonInput" accept=".json" class="hidden" onchange="importFromJSON(event)">
+                            </label>
+                            <div class="my-1 border-t border-slate-200 dark:border-slate-700/80"></div>
+                            <button onclick="loadDemoData()" class="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800/90 flex items-center gap-2.5 text-amber-600 dark:text-amber-400">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                Cargar Tareas Demo
+                            </button>
+                            <button onclick="handleLogout()" class="w-full px-4 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2.5 text-rose-600 dark:text-rose-400 font-medium">
+                                <i data-lucide="log-out" class="w-4 h-4"></i>
+                                Cerrar Sesión
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Botón Modo Oscuro/Claro -->
+                    <button onclick="toggleDarkMode()" title="Alternar tema oscuro/claro" class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-white dark:bg-[#1e293b] hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 transition-colors shadow-xs">
+                        <i data-lucide="moon" id="darkIcon" class="w-4 h-4 block dark:hidden"></i>
+                        <i data-lucide="sun" id="lightIcon" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Contenedor Principal -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+            <!-- 1. Dashboard -->
+            <section aria-label="Métricas del proyecto" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-slate-400 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Total PROYECTOS</span>
+                        <div class="p-1.5 rounded-lg bg-slate-100 dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700"><i data-lucide="layers" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-900 dark:text-white" id="statTotal">0</div>
+                </div>
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-slate-500 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Pendientes</span>
+                        <div class="p-1.5 rounded-lg bg-slate-100 dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700"><i data-lucide="circle-dashed" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-700 dark:text-slate-200" id="statPending">0</div>
+                </div>
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-blue-500 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-blue-600 dark:text-blue-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">En Progreso</span>
+                        <div class="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/70"><i data-lucide="loader" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="text-2xl font-bold text-blue-600 dark:text-blue-400" id="statInProgress">0</div>
+                </div>
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-emerald-500 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-emerald-600 dark:text-emerald-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">COMPLETADOS</span>
+                        <div class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800/70"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" id="statCompleted">0</span>
+                        <span class="text-xs font-medium text-slate-400" id="statCompletionRate">(0%)</span>
+                    </div>
+                </div>
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-rose-500 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-rose-600 dark:text-rose-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">VENCIDOS</span>
+                        <div class="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/70 border border-rose-200 dark:border-rose-800/70"><i data-lucide="alert-triangle" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="text-2xl font-bold text-rose-600 dark:text-rose-400" id="statOverdue">0</div>
+                </div>
+                <div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 border-t-2 border-t-indigo-500 flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-indigo-600 dark:text-indigo-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">TIEMPO (Inv / Est)</span>
+                        <div class="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800/70"><i data-lucide="clock" class="w-4 h-4"></i></div>
+                    </div>
+                    <div class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate" id="statHours">0.0h <span class="text-xs font-normal text-slate-400">/ 0.0h</span></div>
+                </div>
+            </section>
+
+            <!-- 2. Barra de Herramientas -->
+            <section id="toolbarSection" class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-300 dark:border-slate-700/90 space-y-3">
+                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                    <div class="relative flex-1 min-w-[220px]">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Buscar por título, descripción, categoría, foto o responsable..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-slate-50 dark:bg-[#1e293b] text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                        <select id="filterStatus" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                            <option value="ALL">Estado: Todos</option>
+                            <option value="Pendiente">PENDIENTES</option>
+                            <option value="En Progreso">EN PROGRESO</option>
+                            <option value="En Revisión">EN REVISIÓN</option>
+                            <option value="Completada">COMPLETADA</option>
+                        </select>
+                        <select id="filterPriority" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                            <option value="ALL">Prioridad: Todas</option>
+                            <option value="Urgente">URGENTE</option>
+                            <option value="Alta">ALTA</option>
+                            <option value="Media">MEDIA</option>
+                            <option value="Baja">BAJA</option>
+                        </select>
+                        <select id="filterCategory" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                            <option value="ALL">Categoría: Todas</option>
+                            <option value="DIA">DIA</option>
+                            <option value="ITS">ITS</option>
+                            <option value="PAD">PAD</option>
+                            <option value="PAP">PAP</option>
+                            <option value="EIA">EIA</option>
+                            <option value="Ambiental">Ambiental</option>
+                        </select>
+                        <select id="filterAssignee" onchange="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600/80 bg-slate-50 dark:bg-[#1e293b] text-sm max-w-[165px]">
+                            <option value="ALL">RESPONSABLE: TODOS</option>
+                        </select>
+                        <button onclick="resetFilters()" id="resetFiltersBtn" class="hidden px-2.5 py-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/50 rounded-xl">Limpiar filtros</button>
+
+                        <div class="inline-flex flex-wrap rounded-xl bg-slate-100 dark:bg-[#0b0f19] p-1 border border-slate-300 dark:border-slate-700 gap-0.5">
+                            <button onclick="switchView('kanban')" id="btnViewKanban" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 bg-white dark:bg-[#1e293b] text-blue-600 dark:text-indigo-300 border border-slate-200 dark:border-slate-600 shadow-xs"><i data-lucide="kanban" class="w-4 h-4"></i>Tablero</button>
+                            <button onclick="switchView('list')" id="btnViewList" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 text-slate-600 dark:text-slate-400"><i data-lucide="list" class="w-4 h-4"></i>Lista</button>
+                            <button onclick="switchView('report')" id="btnViewReport" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 text-slate-600 dark:text-slate-400"><i data-lucide="user-check" class="w-4 h-4"></i>Reporte Diario</button>
+                            <button onclick="switchView('gallery')" id="btnViewGallery" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 text-slate-600 dark:text-slate-400"><i data-lucide="image" class="w-4 h-4"></i>Galería <span id="galleryTotalBadge" class="text-[10px] px-1.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold">0</span></button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Vista Kanban -->
+            <section id="kanbanView" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+                <div class="framed-panel bg-slate-200/70 dark:bg-[#111827] rounded-2xl p-3.5 border border-slate-300 dark:border-slate-700/90 flex flex-col min-h-[440px]" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'Pendiente')">
+                    <div class="flex items-center justify-between pb-3 mb-3 px-1 border-b border-slate-300 dark:border-slate-700/80">
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span><h2 class="font-semibold text-sm">PENDIENTES</h2><span id="count-Pendiente" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-[#1e293b] border border-slate-300 dark:border-slate-600">0</span></div>
+                        <button onclick="openTaskModal(null, 'Pendiente')" class="p-1.5 text-slate-500 hover:text-white rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="col-Pendiente" class="space-y-3 flex-1"></div>
+                </div>
+                <div class="framed-panel bg-slate-200/70 dark:bg-[#111827] rounded-2xl p-3.5 border border-slate-300 dark:border-slate-700/90 flex flex-col min-h-[440px]" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'En Progreso')">
+                    <div class="flex items-center justify-between pb-3 mb-3 px-1 border-b border-slate-300 dark:border-slate-700/80">
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span><h2 class="font-semibold text-sm">EN PROGRESO</h2><span id="count-En Progreso" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-700/80 text-blue-700 dark:text-blue-300">0</span></div>
+                        <button onclick="openTaskModal(null, 'En Progreso')" class="p-1.5 text-slate-500 hover:text-white rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="col-En Progreso" class="space-y-3 flex-1"></div>
+                </div>
+                <div class="framed-panel bg-slate-200/70 dark:bg-[#111827] rounded-2xl p-3.5 border border-slate-300 dark:border-slate-700/90 flex flex-col min-h-[440px]" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'En Revisión')">
+                    <div class="flex items-center justify-between pb-3 mb-3 px-1 border-b border-slate-300 dark:border-slate-700/80">
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span><h2 class="font-semibold text-sm">EN REVISIÓN</h2><span id="count-En Revisión" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-700/80 text-amber-700 dark:text-amber-300">0</span></div>
+                        <button onclick="openTaskModal(null, 'En Revisión')" class="p-1.5 text-slate-500 hover:text-white rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="col-En Revisión" class="space-y-3 flex-1"></div>
+                </div>
+                <div class="framed-panel bg-slate-200/70 dark:bg-[#111827] rounded-2xl p-3.5 border border-slate-300 dark:border-slate-700/90 flex flex-col min-h-[440px]" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'Completada')">
+                    <div class="flex items-center justify-between pb-3 mb-3 px-1 border-b border-slate-300 dark:border-slate-700/80">
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><h2 class="font-semibold text-sm">COMPLETADA</h2><span id="count-Completada" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/80 text-emerald-700 dark:text-emerald-300">0</span></div>
+                        <button onclick="openTaskModal(null, 'Completada')" class="p-1.5 text-slate-500 hover:text-white rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="col-Completada" class="space-y-3 flex-1"></div>
+                </div>
+            </section>
+
+            <!-- 4. Vista Lista -->
+            <section id="listView" class="hidden framed-panel bg-white dark:bg-[#111827] rounded-2xl border border-slate-300 dark:border-slate-700/90 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#1e293b] text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                <th class="py-3.5 px-4 cursor-pointer" onclick="sortList('title')">Tarea</th>
+                                <th class="py-3.5 px-4 cursor-pointer" onclick="sortList('assignee')">Responsable</th>
+                                <th class="py-3.5 px-4 cursor-pointer" onclick="sortList('status')">Estado</th>
+                                <th class="py-3.5 px-4 cursor-pointer" onclick="sortList('priority')">Prioridad</th>
+                                <th class="py-3.5 px-4">Evidencia</th>
+                                <th class="py-3.5 px-4 cursor-pointer" onclick="sortList('dueDate')">Vencimiento</th>
+                                <th class="py-3.5 px-4">Tiempo</th>
+                                <th class="py-3.5 px-4">Progreso</th>
+                                <th class="py-3.5 px-4 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listTableBody" class="divide-y divide-slate-200 dark:divide-slate-800 text-sm"></tbody>
+                    </table>
+                </div>
+                <div id="emptyListState" class="hidden py-12 text-center text-slate-500 dark:text-slate-400">No se encontraron tareas con los filtros actuales.</div>
+            </section>
+
+            <!-- 5. Vista Reporte Diario -->
+            <section id="dailyReportView" class="hidden space-y-5">
+                <div class="framed-panel bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-300 dark:border-slate-700/90 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Reporte Diario de Productividad por Persona</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Detalle de tareas completadas, horas invertidas y evidencia fotográfica.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <input type="date" id="reportDateInput" onchange="renderDailyReport()" class="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                        <select id="reportPersonSelect" onchange="renderDailyReport()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm"><option value="ALL">Todas las personas</option></select>
+                        <select id="reportScopeSelect" onchange="renderDailyReport()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                            <option value="COMPLETED_ONLY">Solo Completadas en el día</option>
+                            <option value="ALL_ACTIVE_DAY">Completadas + Activas del día</option>
+                        </select>
+                        <button onclick="exportDailyReportCSV()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-medium flex items-center gap-1.5"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar Día CSV</button>
+                    </div>
+                </div>
+                <div id="dailyReportSummaryBar" class="grid grid-cols-2 sm:grid-cols-4 gap-3.5"></div>
+                <div id="dailyReportContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+            </section>
+
+            <!-- 6. Vista Galería -->
+            <section id="galleryView" class="hidden space-y-5">
+                <div class="framed-panel bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-300 dark:border-slate-700/90 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Repositorio de Evidencia Fotográfica</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Registro visual consolidado de campo y entregables técnicos.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <select id="galleryCategoryFilter" onchange="renderGalleryView()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm">
+                            <option value="ALL">Área: Todas</option><option value="DIA">DIA</option><option value="ITS">ITS</option><option value="PAD">PAD</option><option value="PAP">PAP</option><option value="EIA">EIA</option><option value="Ambiental">Ambiental</option>
+                        </select>
+                        <select id="galleryPersonFilter" onchange="renderGalleryView()" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-[#1e293b] text-sm"><option value="ALL">Responsable: Todos</option></select>
+                    </div>
+                </div>
+                <div id="galleryGridContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Crear / Editar Tarea -->
+    <div id="taskModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white dark:bg-[#111827] rounded-2xl max-w-2xl w-full border-2 border-slate-300 dark:border-slate-600 shadow-2xl overflow-hidden my-auto">
+            <div class="px-6 py-4 bg-slate-50 dark:bg-[#1e293b] border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <h3 id="modalTitle" class="text-lg font-bold text-slate-900 dark:text-white">Nueva Tarea</h3>
+                <button onclick="closeTaskModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="taskForm" onsubmit="saveTask(event)" class="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+                <input type="hidden" id="taskId">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Título de la tarea *</label>
+                    <input type="text" id="taskTitle" required placeholder="Formulación DIA" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Requerimiento | Documentos</label>
+                    <textarea id="taskDesc" rows="2" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm"></textarea>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Responsable *</label>
+                        <input type="text" id="taskAssignee" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Categoría / Área</label>
+                        <select id="taskCategory" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                            <option value="DIA">DIA</option><option value="ITS">ITS</option><option value="PAD">PAD</option><option value="PAP">PAP</option><option value="EIA">EIA</option><option value="Ambiental">Ambiental</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Estado</label>
+                        <select id="taskStatus" onchange="toggleCompletedDateField()" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                            <option value="Pendiente">Pendiente</option><option value="En Progreso">En Progreso</option><option value="En Revisión">En Revisión</option><option value="Completada">Completada</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Prioridad</label>
+                        <select id="taskPriority" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                            <option value="Baja">Baja</option><option value="Media" selected>Media</option><option value="Alta">Alta</option><option value="Urgente">Urgente</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="completedDateWrapper" class="hidden bg-emerald-50/70 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-300 dark:border-emerald-700/70 flex items-center justify-between gap-4">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Fecha de Cierre</label>
+                    <input type="date" id="taskCompletedDate" class="px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-600 bg-white dark:bg-[#1e293b] text-sm">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 dark:bg-[#0b0f19]/80 p-3.5 rounded-xl border border-slate-300 dark:border-slate-700">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Tiempo Estimado</label>
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="taskEstHours" min="0" value="1" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm text-center"><span>h</span>
+                            <input type="number" id="taskEstMinutes" min="0" max="59" step="5" value="0" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm text-center"><span>m</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Fecha Inicio</label>
+                        <input type="date" id="taskStartDate" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider mb-1">Fecha Límite</label>
+                        <input type="date" id="taskDueDate" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                    </div>
+                </div>
+                <!-- Subtareas -->
+                <div class="p-3.5 rounded-xl border border-slate-300 dark:border-slate-700/80">
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5">Subtareas</label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="newSubtaskInput" onkeydown="if(event.key==='Enter'){event.preventDefault(); addSubtaskToForm();}" placeholder="Añadir paso..." class="flex-1 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1e293b] text-sm">
+                        <button type="button" onclick="addSubtaskToForm()" class="px-3.5 py-2 bg-slate-200 dark:bg-slate-700 rounded-xl text-sm font-medium">Añadir</button>
+                    </div>
+                    <ul id="modalSubtasksList" class="space-y-1.5 max-h-36 overflow-y-auto"></ul>
+                </div>
+                <!-- Evidencia Fotográfica -->
+                <div class="p-3.5 rounded-xl border border-slate-300 dark:border-slate-700/90 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-indigo-500">Evidencia Fotográfica (.JPG / .PNG)</label>
+                        <span id="modalPhotoCounter" class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">0 fotos</span>
+                    </div>
+                    <div id="photoDropzone" ondragover="handlePhotoDragOver(event)" ondragleave="handlePhotoDragLeave(event)" ondrop="handlePhotoDrop(event)" onclick="document.getElementById('taskPhotoInput').click()" class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 text-center cursor-pointer">
+                        <input type="file" id="taskPhotoInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple class="hidden" onchange="handlePhotoFileSelect(event)">
+                        <p class="text-xs sm:text-sm font-medium">Arrastra fotografías aquí o <span class="text-indigo-500 underline font-semibold">selecciona archivos</span></p>
+                    </div>
+                    <div id="modalPhotosGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto"></div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-sm">Cancelar</button>
+                    <button type="submit" id="saveTaskBtn" class="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium">Guardar en mi cuenta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal -->
+    <div id="lightboxModal" class="fixed inset-0 z-50 hidden bg-black/90 backdrop-blur-md flex flex-col justify-between p-4" onclick="if(event.target === this) closeLightbox()">
+        <div class="max-w-5xl w-full mx-auto bg-[#111827] border border-slate-700 rounded-2xl px-4 py-3 flex items-center justify-between">
+            <div>
+                <h3 id="lbTaskTitle" class="text-sm font-bold text-white"></h3>
+                <p id="lbMetaInfo" class="text-xs text-slate-400"></p>
+            </div>
+            <button onclick="closeLightbox()" class="p-2 rounded-xl bg-rose-950 text-rose-200"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="flex-1 flex items-center justify-center my-3 overflow-hidden">
+            <img id="lbImage" src="" class="max-h-[72vh] w-auto object-contain rounded-xl">
+        </div>
+        <div class="max-w-3xl w-full mx-auto bg-[#111827] border border-slate-700 rounded-2xl px-4 py-2.5 text-center">
+            <p id="lbCaption" class="text-xs text-slate-200"></p>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <script>
+        // =========================================================================
+        // 1. CONFIGURACIÓN DE SUPABASE (PEGA AQUÍ TUS CREDENCIALES DE TU PROYECTO)
+        // =========================================================================
+        const SUPABASE_URL = 'https://sb_publishable_k3XTOrMuEx9rA2JSC6btcA_w9FnMy7L';
+        const SUPABASE_ANON_KEY = '...';
+
+        const isSupabaseConfigured = SUPABASE_URL.startsWith('https://') && !SUPABASE_URL.includes('TU-PROYECTO');
+        const sb = isSupabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+        let currentUser = null;
+        let authMode = 'login'; // 'login' | 'register'
+        let tasks = [];
+        let currentView = 'kanban';
+        let sortConfig = { key: 'dueDate', asc: true };
+        let formSubtasks = [];
+        let formPhotos = [];
+        let activeTimerInterval = null;
+        let draggedTaskId = null;
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            document.getElementById('reportDateInput').value = getTodayLocalISO();
+
+            if (!isSupabaseConfigured) {
+                document.getElementById('supabaseConfigWarning').classList.remove('hidden');
+                return;
+            }
+
+            // Verificar si ya existe sesión activa
+            const { data: { session } } = await sb.auth.getSession();
+            if (session?.user) {
+                onUserAuthenticated(session.user);
+            }
+
+            // Escuchar cambios de sesión (login, registro, logout)
+            sb.auth.onAuthStateChange((_event, session) => {
+                if (session?.user) {
+                    onUserAuthenticated(session.user);
+                } else {
+                    currentUser = null;
+                    document.getElementById('authScreen').classList.remove('hidden');
+                    document.getElementById('appShell').classList.add('hidden');
+                }
+            });
+        });
+
+        // =========================================================================
+        // 2. AUTENTICACIÓN MULTIUSUARIO (REGISTRO / LOGIN / LOGOUT)
+        // =========================================================================
+        function switchAuthTab(mode) {
+            authMode = mode;
+            const isReg = mode === 'register';
+            document.getElementById('registerNameWrapper').classList.toggle('hidden', !isReg);
+            document.getElementById('authSubmitLabel').textContent = isReg ? 'Crear cuenta y entrar' : 'Ingresar a mi espacio';
+            document.getElementById('authErrorBox').classList.add('hidden');
+            document.getElementById('authSuccessBox').classList.add('hidden');
+
+            const activeCls = 'py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white dark:bg-[#1e293b] text-blue-600 dark:text-indigo-300 border border-slate-200 dark:border-slate-600 shadow-xs transition-all';
+            const inactiveCls = 'py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-transparent transition-all';
+            document.getElementById('tabLoginBtn').className = isReg ? inactiveCls : activeCls;
+            document.getElementById('tabRegisterBtn').className = isReg ? activeCls : inactiveCls;
+        }
+
+        async function handleAuthSubmit(event) {
+            event.preventDefault();
+            if (!sb) {
+                showAuthMessage('error', 'Configura primero SUPABASE_URL y SUPABASE_ANON_KEY en el archivo index.html.');
+                return;
+            }
+
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const fullName = document.getElementById('authFullName').value.trim();
+            const btn = document.getElementById('authSubmitBtn');
+
+            btn.disabled = true;
+            document.getElementById('authErrorBox').classList.add('hidden');
+            document.getElementById('authSuccessBox').classList.add('hidden');
+
+            try {
+                if (authMode === 'register') {
+                    const { data, error } = await sb.auth.signUp({
+                        email,
+                        password,
+                        options: { data: { full_name: fullName } }
+                    });
+                    if (error) throw error;
+                    if (data.user && !data.session) {
+                        showAuthMessage('success', 'Registro exitoso. Revisa tu correo para confirmar tu cuenta y luego inicia sesión.');
+                    } else if (data.session?.user) {
+                        onUserAuthenticated(data.session.user);
+                    }
+                } else {
+                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                    if (data.user) onUserAuthenticated(data.user);
+                }
+            } catch (err) {
+                showAuthMessage('error', err.message || 'Error de autenticación');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function showAuthMessage(type, msg) {
+            const box = document.getElementById(type === 'error' ? 'authErrorBox' : 'authSuccessBox');
+            box.textContent = msg;
+            box.classList.remove('hidden');
+        }
+
+        async function onUserAuthenticated(user) {
+            currentUser = user;
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('appShell').classList.remove('hidden');
+            document.getElementById('currentUserEmailLabel').textContent = user.email;
+            document.getElementById('dropdownUserEmail').textContent = user.email;
+            await syncFromCloud(false);
+            startGlobalTimerTick();
+            lucide.createIcons();
+        }
+
+        async function handleLogout() {
+            document.getElementById('dataMenuDropdown').classList.add('hidden');
+            if (sb) await sb.auth.signOut();
+            tasks = [];
+            showToast('Sesión cerrada', 'info');
+        }
+
+        // =========================================================================
+        // 3. SINCRONIZACIÓN CON BASE DE DATOS EN LA NUBE (POR USUARIO)
+        // =========================================================================
+        async function syncFromCloud(notify = false) {
+            if (!sb || !currentUser) return;
+            const { data, error } = await sb
+                .from('tasks')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                showToast('Error al cargar tus tareas: ' + error.message, 'error');
+                return;
+            }
+
+            tasks = (data || []).map(row => ({
+                id: row.id,
+                title: row.title,
+                description: row.description || '',
+                assignee: row.assignee || '',
+                category: row.category || 'DIA',
+                status: row.status || 'Pendiente',
+                priority: row.priority || 'Media',
+                estimatedMinutes: row.estimated_minutes || 0,
+                loggedSeconds: row.logged_seconds || 0,
+                timerRunning: false,
+                timerStartedAt: null,
+                startDate: row.start_date || '',
+                dueDate: row.due_date || '',
+                completedDate: row.completed_date || null,
+                subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
+                photos: Array.isArray(row.photos) ? row.photos : []
+            }));
+
+            renderAll();
+            if (notify) showToast('Datos sincronizados con la nube', 'success');
+        }
+
+        async function upsertTaskInCloud(task, isNew = false) {
+            if (!sb || !currentUser) return false;
+            const payload = {
+                user_id: currentUser.id,
+                title: task.title,
+                description: task.description,
+                assignee: task.assignee,
+                category: task.category,
+                status: task.status,
+                priority: task.priority,
+                estimated_minutes: task.estimatedMinutes,
+                logged_seconds: getTaskElapsedSeconds(task),
+                start_date: task.startDate || null,
+                due_date: task.dueDate || null,
+                completed_date: task.completedDate || null,
+                subtasks: task.subtasks || [],
+                photos: task.photos || []
+            };
+
+            if (isNew) {
+                const { data, error } = await sb.from('tasks').insert(payload).select().single();
+                if (error) {
+                    showToast('Error guardando tarea: ' + error.message, 'error');
+                    return false;
+                }
+                task.id = data.id;
+                return true;
+            } else {
+                const { error } = await sb.from('tasks').update(payload).eq('id', task.id).eq('user_id', currentUser.id);
+                if (error) {
+                    showToast('Error actualizando tarea: ' + error.message, 'error');
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        async function deleteTaskInCloud(taskId) {
+            if (!sb || !currentUser) return false;
+            const { error } = await sb.from('tasks').delete().eq('id', taskId).eq('user_id', currentUser.id);
+            if (error) {
+                showToast('Error eliminando tarea: ' + error.message, 'error');
+                return false;
+            }
+            return true;
+        }
+
+        // =========================================================================
+        // 4. LÓGICA DE TAREAS, CRONÓMETRO, FOTOS Y VISTAS
+        // =========================================================================
+        function getTodayLocalISO() {
+            const now = new Date();
+            return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        function getTaskElapsedSeconds(task) {
+            let total = task.loggedSeconds || 0;
+            if (task.timerRunning && task.timerStartedAt) total += Math.floor((Date.now() - task.timerStartedAt) / 1000);
+            return total;
+        }
+
+        async function toggleTaskTimer(taskId, event) {
+            if (event) event.stopPropagation();
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            if (task.timerRunning) {
+                task.loggedSeconds = getTaskElapsedSeconds(task);
+                task.timerRunning = false;
+                task.timerStartedAt = null;
+                await upsertTaskInCloud(task, false);
+                showToast(`Tiempo guardado en la nube: ${task.title}`, 'info');
+            } else {
+                task.timerRunning = true;
+                task.timerStartedAt = Date.now();
+                if (task.status === 'Pendiente') {
+                    task.status = 'En Progreso';
+                    await upsertTaskInCloud(task, false);
+                }
+            }
+            renderAll();
+        }
+
+        function startGlobalTimerTick() {
+            if (activeTimerInterval) clearInterval(activeTimerInterval);
+            activeTimerInterval = setInterval(() => {
+                tasks.filter(t => t.timerRunning).forEach(t => {
+                    document.querySelectorAll(`[data-timer-id="${t.id}"]`).forEach(el => {
+                        el.textContent = formatDurationSeconds(getTaskElapsedSeconds(t));
+                    });
+                });
+            }, 1000);
+        }
+
+        function formatDurationSeconds(s) {
+            const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+            return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+        }
+
+        function formatEstimatedMinutes(mins) {
+            if (!mins) return '0h';
+            const h = Math.floor(mins / 60), m = mins % 60;
+            return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+        }
+
+        function escapeHTML(str) {
+            return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function getInitials(name) {
+            return (name || '?').split(/[\s.]+/).filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        }
+
+        function renderAll() {
+            updateAssigneeFilterOptions();
+            updateDashboardStats();
+            const filtered = getFilteredTasks();
+            renderKanban(filtered);
+            renderList(filtered);
+            renderDailyReport();
+            renderGalleryView();
+            lucide.createIcons();
+        }
+
+        function updateDashboardStats() {
+            const total = tasks.length;
+            const pending = tasks.filter(t => t.status === 'Pendiente').length;
+            const inProgress = tasks.filter(t => t.status === 'En Progreso').length;
+            const completed = tasks.filter(t => t.status === 'Completada').length;
+            const todayStr = getTodayLocalISO();
+            const overdue = tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'Completada').length;
+            const estHours = (tasks.reduce((a, t) => a + (t.estimatedMinutes || 0), 0) / 60).toFixed(1);
+            const invHours = (tasks.reduce((a, t) => a + getTaskElapsedSeconds(t), 0) / 3600).toFixed(1);
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPending').textContent = pending;
+            document.getElementById('statInProgress').textContent = inProgress;
+            document.getElementById('statCompleted').textContent = completed;
+            document.getElementById('statCompletionRate').textContent = `(${total ? Math.round((completed / total) * 100) : 0}%)`;
+            document.getElementById('statOverdue').textContent = overdue;
+            document.getElementById('statHours').innerHTML = `${invHours}h <span class="text-xs font-normal text-slate-400">/ ${estHours}h</span>`;
+            document.getElementById('galleryTotalBadge').textContent = tasks.reduce((a, t) => a + (t.photos || []).length, 0);
+        }
+
+        function updateAssigneeFilterOptions() {
+            const assignees = [...new Set(tasks.map(t => (t.assignee || '').trim()).filter(Boolean))].sort();
+            ['filterAssignee', 'reportPersonSelect', 'galleryPersonFilter'].forEach((id, idx) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const prev = el.value;
+                el.innerHTML = `<option value="ALL">${idx === 1 ? 'Todas las personas' : 'Responsable: Todos'}</option>` +
+                    assignees.map(p => `<option value="${escapeHTML(p)}">${escapeHTML(p)}</option>`).join('');
+                if (assignees.includes(prev)) el.value = prev;
+            });
+        }
+
+        function getFilteredTasks() {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
+            const st = document.getElementById('filterStatus').value;
+            const pr = document.getElementById('filterPriority').value;
+            const cat = document.getElementById('filterCategory').value;
+            const asg = document.getElementById('filterAssignee').value;
+            document.getElementById('resetFiltersBtn').classList.toggle('hidden', !q && st === 'ALL' && pr === 'ALL' && cat === 'ALL' && asg === 'ALL');
+
+            return tasks.filter(t => {
+                const matchQ = !q || t.title.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q) || (t.assignee || '').toLowerCase().includes(q);
+                return matchQ && (st === 'ALL' || t.status === st) && (pr === 'ALL' || t.priority === pr) && (cat === 'ALL' || t.category === cat) && (asg === 'ALL' || t.assignee === asg);
+            });
+        }
+
+        function applyFilters() { renderAll(); }
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterStatus').value = 'ALL';
+            document.getElementById('filterPriority').value = 'ALL';
+            document.getElementById('filterCategory').value = 'ALL';
+            document.getElementById('filterAssignee').value = 'ALL';
+            renderAll();
+        }
+
+        function renderKanban(filtered) {
+            ['Pendiente', 'En Progreso', 'En Revisión', 'Completada'].forEach(status => {
+                const colEl = document.getElementById(`col-${status}`);
+                const items = filtered.filter(t => t.status === status);
+                document.getElementById(`count-${status}`).textContent = items.length;
+                colEl.innerHTML = items.length === 0
+                    ? `<div class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center text-xs text-slate-400">Sin tareas en esta columna</div>`
+                    : items.map(t => `
+                        <article draggable="true" ondragstart="draggedTaskId='${t.id}'" class="framed-card bg-white dark:bg-[#1e293b] p-4 rounded-xl border border-slate-300 dark:border-slate-600/80 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">${escapeHTML(t.category)} • ${t.priority}</span>
+                                <div class="flex gap-1">
+                                    <button onclick="openTaskModal('${t.id}')" class="p-1 text-slate-400 hover:text-indigo-400"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                                    <button onclick="askDeleteTask('${t.id}')" class="p-1 text-slate-400 hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                                </div>
+                            </div>
+                            <h3 class="font-semibold text-sm">${escapeHTML(t.title)}</h3>
+                            ${t.description ? `<p class="text-xs text-slate-500 dark:text-slate-300/80 line-clamp-2">${escapeHTML(t.description)}</p>` : ''}
+                            ${(t.photos || []).length > 0 ? `<div class="flex gap-1.5">${t.photos.slice(0, 3).map((ph, idx) => `<img src="${ph.dataUrl}" onclick="openTaskLightbox('${t.id}', ${idx})" class="w-11 h-10 object-cover rounded-lg border border-slate-600 cursor-pointer">`).join('')}</div>` : ''}
+                            <div class="flex items-center justify-between text-xs bg-slate-50 dark:bg-[#111827] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                <span data-timer-id="${t.id}" class="font-mono">${formatDurationSeconds(getTaskElapsedSeconds(t))}</span>
+                                <button onclick="toggleTaskTimer('${t.id}', event)" class="px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px]">${t.timerRunning ? 'Pausar' : 'Iniciar'}</button>
+                            </div>
+                            <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                                <span class="font-medium truncate">${escapeHTML(t.assignee)}</span>
+                                <select onchange="quickChangeStatus('${t.id}', this.value)" class="bg-slate-100 dark:bg-[#111827] border border-slate-600 rounded px-1.5 py-0.5 text-[11px]">
+                                    <option value="Pendiente" ${t.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                                    <option value="En Progreso" ${t.status === 'En Progreso' ? 'selected' : ''}>Progreso</option>
+                                    <option value="En Revisión" ${t.status === 'En Revisión' ? 'selected' : ''}>Revisión</option>
+                                    <option value="Completada" ${t.status === 'Completada' ? 'selected' : ''}>Listo</option>
+                                </select>
+                            </div>
+                        </article>`).join('');
+            });
+        }
+
+        function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('kanban-col-drag-over'); }
+        function handleDragLeave(e) { e.currentTarget.classList.remove('kanban-col-drag-over'); }
+        function handleDrop(e, newStatus) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('kanban-col-drag-over');
+            if (draggedTaskId) quickChangeStatus(draggedTaskId, newStatus);
+        }
+
+        async function quickChangeStatus(taskId, newStatus) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task || task.status === newStatus) return;
+            task.status = newStatus;
+            task.completedDate = newStatus === 'Completada' ? getTodayLocalISO() : null;
+            if (newStatus === 'Completada' && task.timerRunning) {
+                task.loggedSeconds = getTaskElapsedSeconds(task);
+                task.timerRunning = false;
+            }
+            renderAll();
+            await upsertTaskInCloud(task, false);
+        }
+
+        function switchView(view) {
+            currentView = view;
+            ['kanbanView', 'listView', 'dailyReportView', 'galleryView'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            const map = { kanban: 'kanbanView', list: 'listView', report: 'dailyReportView', gallery: 'galleryView' };
+            document.getElementById(map[view]).classList.remove('hidden');
+            renderAll();
+        }
+
+        function renderList(filtered) {
+            const tbody = document.getElementById('listTableBody');
+            tbody.innerHTML = filtered.map(t => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b]/70">
+                    <td class="py-3 px-4 font-semibold">${escapeHTML(t.title)}</td>
+                    <td class="py-3 px-4">${escapeHTML(t.assignee)}</td>
+                    <td class="py-3 px-4">${t.status}</td>
+                    <td class="py-3 px-4">${t.priority}</td>
+                    <td class="py-3 px-4">${(t.photos || []).length} fotos</td>
+                    <td class="py-3 px-4 text-xs">${t.dueDate || '—'}</td>
+                    <td class="py-3 px-4 font-mono text-xs">${formatDurationSeconds(getTaskElapsedSeconds(t))}</td>
+                    <td class="py-3 px-4 text-xs">${t.status === 'Completada' ? '100%' : 'En curso'}</td>
+                    <td class="py-3 px-4 text-right">
+                        <button onclick="openTaskModal('${t.id}')" class="p-1 text-indigo-400"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="askDeleteTask('${t.id}')" class="p-1 text-rose-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function renderDailyReport() {
+            const container = document.getElementById('dailyReportContainer');
+            const selectedDate = document.getElementById('reportDateInput').value || getTodayLocalISO();
+            const reportTasks = tasks.filter(t => t.status === 'Completada' && t.completedDate === selectedDate);
+            container.innerHTML = reportTasks.length === 0
+                ? `<div class="col-span-full p-8 text-center text-sm text-slate-400">Sin tareas completadas el ${selectedDate}.</div>`
+                : reportTasks.map(t => `<div class="framed-panel bg-white dark:bg-[#111827] p-4 rounded-xl border border-slate-700"><strong>${escapeHTML(t.assignee)}</strong>: ${escapeHTML(t.title)}</div>`).join('');
+        }
+
+        function renderGalleryView() {
+            const container = document.getElementById('galleryGridContainer');
+            const photos = [];
+            tasks.forEach(t => (t.photos || []).forEach((ph, idx) => photos.push({ ...ph, taskId: t.id, taskTitle: t.title, assignee: t.assignee, idx })));
+            container.innerHTML = photos.length === 0
+                ? `<div class="col-span-full p-8 text-center text-sm text-slate-400">No hay fotografías adjuntas aún.</div>`
+                : photos.map(p => `<div class="framed-card bg-white dark:bg-[#111827] rounded-xl border border-slate-700 overflow-hidden"><img src="${p.dataUrl}" onclick="openTaskLightbox('${p.taskId}', ${p.idx})" class="w-full aspect-video object-cover cursor-pointer"><div class="p-3 text-xs"><p class="font-semibold truncate">${escapeHTML(p.caption || p.name)}</p><p class="text-slate-400 truncate">${escapeHTML(p.taskTitle)}</p></div></div>`).join('');
+        }
+
+        // Modal Tarea y Fotos
+        function toggleCompletedDateField() {
+            document.getElementById('completedDateWrapper').classList.toggle('hidden', document.getElementById('taskStatus').value !== 'Completada');
+        }
+
+        function openTaskModal(taskId = null, defaultStatus = 'Pendiente') {
+            document.getElementById('taskForm').reset();
+            if (taskId) {
+                const t = tasks.find(x => x.id === taskId);
+                if (!t) return;
+                document.getElementById('modalTitle').textContent = 'Editar Tarea';
+                document.getElementById('taskId').value = t.id;
+                document.getElementById('taskTitle').value = t.title;
+                document.getElementById('taskDesc').value = t.description || '';
+                document.getElementById('taskAssignee').value = t.assignee || '';
+                document.getElementById('taskCategory').value = t.category || 'DIA';
+                document.getElementById('taskStatus').value = t.status;
+                document.getElementById('taskPriority').value = t.priority;
+                document.getElementById('taskCompletedDate').value = t.completedDate || getTodayLocalISO();
+                document.getElementById('taskEstHours').value = Math.floor((t.estimatedMinutes || 0) / 60);
+                document.getElementById('taskEstMinutes').value = (t.estimatedMinutes || 0) % 60;
+                document.getElementById('taskStartDate').value = t.startDate || '';
+                document.getElementById('taskDueDate').value = t.dueDate || '';
+                formSubtasks = JSON.parse(JSON.stringify(t.subtasks || []));
+                formPhotos = JSON.parse(JSON.stringify(t.photos || []));
+            } else {
+                document.getElementById('modalTitle').textContent = 'Nueva Tarea';
+                document.getElementById('taskId').value = '';
+                document.getElementById('taskStatus').value = defaultStatus;
+                document.getElementById('taskStartDate').value = getTodayLocalISO();
+                document.getElementById('taskCompletedDate').value = getTodayLocalISO();
+                formSubtasks = [];
+                formPhotos = [];
+            }
+            toggleCompletedDateField();
+            renderFormSubtasks();
+            renderFormPhotos();
+            document.getElementById('taskModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
+
+        function addSubtaskToForm() {
+            const input = document.getElementById('newSubtaskInput');
+            if (!input.value.trim()) return;
+            formSubtasks.push({ id: 's-' + Date.now(), text: input.value.trim(), done: false });
+            input.value = '';
+            renderFormSubtasks();
+        }
+
+        function renderFormSubtasks() {
+            document.getElementById('modalSubtasksList').innerHTML = formSubtasks.map((st, idx) => `
+                <li class="flex items-center justify-between bg-slate-100 dark:bg-[#1e293b] px-3 py-1.5 rounded-lg text-xs">
+                    <label class="flex items-center gap-2"><input type="checkbox" ${st.done ? 'checked' : ''} onchange="formSubtasks[${idx}].done=this.checked">${escapeHTML(st.text)}</label>
+                    <button type="button" onclick="formSubtasks.splice(${idx},1); renderFormSubtasks();" class="text-rose-400">✕</button>
+                </li>`).join('');
+        }
+
+        function handlePhotoDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('photo-dropzone-active'); }
+        function handlePhotoDragLeave(e) { e.currentTarget.classList.remove('photo-dropzone-active'); }
+        function handlePhotoDrop(e) { e.preventDefault(); e.currentTarget.classList.remove('photo-dropzone-active'); processSelectedPhotos(e.dataTransfer.files); }
+        function handlePhotoFileSelect(e) { processSelectedPhotos(e.target.files); }
+
+        async function processSelectedPhotos(files) {
+            for (const file of Array.from(files)) {
+                const dataUrl = await new Promise(res => {
+                    const r = new FileReader();
+                    r.onload = ev => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const c = document.createElement('canvas');
+                            const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+                            c.width = img.width * scale; c.height = img.height * scale;
+                            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                            res(c.toDataURL('image/jpeg', 0.75));
+                        };
+                        img.src = ev.target.result;
+                    };
+                    r.readAsDataURL(file);
+                });
+                formPhotos.push({ id: 'p-' + Date.now(), name: file.name, caption: '', dataUrl });
+            }
+            renderFormPhotos();
+        }
+
+        function renderFormPhotos() {
+            document.getElementById('modalPhotoCounter').textContent = `${formPhotos.length} fotos`;
+            document.getElementById('modalPhotosGrid').innerHTML = formPhotos.map((ph, idx) => `
+                <div class="flex gap-2 bg-slate-100 dark:bg-[#1e293b] p-2 rounded-xl border border-slate-600">
+                    <img src="${ph.dataUrl}" class="w-16 h-16 object-cover rounded-lg">
+                    <div class="flex-1 min-w-0 space-y-1">
+                        <input type="text" value="${escapeHTML(ph.caption)}" oninput="formPhotos[${idx}].caption=this.value" placeholder="Pie de foto..." class="w-full px-2 py-1 rounded bg-white dark:bg-[#111827] text-xs">
+                        <button type="button" onclick="formPhotos.splice(${idx},1); renderFormPhotos();" class="text-[11px] text-rose-400">Eliminar</button>
+                    </div>
+                </div>`).join('');
+        }
+
+        async function saveTask(event) {
+            event.preventDefault();
+            const id = document.getElementById('taskId').value;
+            const status = document.getElementById('taskStatus').value;
+            const taskData = {
+                id: id || null,
+                title: document.getElementById('taskTitle').value.trim(),
+                description: document.getElementById('taskDesc').value.trim(),
+                assignee: document.getElementById('taskAssignee').value.trim(),
+                category: document.getElementById('taskCategory').value,
+                status,
+                priority: document.getElementById('taskPriority').value,
+                estimatedMinutes: (parseInt(document.getElementById('taskEstHours').value) || 0) * 60 + (parseInt(document.getElementById('taskEstMinutes').value) || 0),
+                loggedSeconds: id ? (tasks.find(t => t.id === id)?.loggedSeconds || 0) : 0,
+                startDate: document.getElementById('taskStartDate').value,
+                dueDate: document.getElementById('taskDueDate').value,
+                completedDate: status === 'Completada' ? (document.getElementById('taskCompletedDate').value || getTodayLocalISO()) : null,
+                subtasks: formSubtasks,
+                photos: formPhotos
+            };
+
+            const btn = document.getElementById('saveTaskBtn');
+            btn.disabled = true;
+            const ok = await upsertTaskInCloud(taskData, !id);
+            btn.disabled = false;
+
+            if (ok) {
+                if (id) {
+                    const idx = tasks.findIndex(t => t.id === id);
+                    if (idx !== -1) tasks[idx] = { ...tasks[idx], ...taskData };
+                } else {
+                    tasks.unshift(taskData);
+                }
+                closeTaskModal();
+                renderAll();
+                showToast('Guardado en tu cuenta de usuario', 'success');
+            }
+        }
+
+        async function askDeleteTask(taskId) {
+            if (!confirm('¿Eliminar esta tarea de tu cuenta?')) return;
+            if (await deleteTaskInCloud(taskId)) {
+                tasks = tasks.filter(t => t.id !== taskId);
+                renderAll();
+                showToast('Tarea eliminada', 'info');
+            }
+        }
+
+        function openTaskLightbox(taskId, idx) {
+            const t = tasks.find(x => x.id === taskId);
+            const ph = t?.photos?.[idx];
+            if (!ph) return;
+            document.getElementById('lbImage').src = ph.dataUrl;
+            document.getElementById('lbTaskTitle').textContent = t.title;
+            document.getElementById('lbMetaInfo').textContent = `${t.assignee} • ${ph.name}`;
+            document.getElementById('lbCaption').textContent = ph.caption || ph.name;
+            document.getElementById('lightboxModal').classList.remove('hidden');
+        }
+        function closeLightbox() { document.getElementById('lightboxModal').classList.add('hidden'); }
+
+        function toggleDataMenu() { document.getElementById('dataMenuDropdown').classList.toggle('hidden'); }
+        function exportToJSON() {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' }));
+            a.download = `cdesk_${getTodayLocalISO()}.json`; a.click();
+        }
+        function exportToCSV() {
+            const csv = '\uFEFF' + ['Titulo,Responsable,Categoria,Estado,Prioridad'].concat(tasks.map(t => `"${t.title}","${t.assignee}",${t.category},${t.status},${t.priority}`)).join('\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+            a.download = `cdesk_${getTodayLocalISO()}.csv`; a.click();
+        }
+        async function importFromJSON(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const list = JSON.parse(await file.text());
+            for (const item of list) await upsertTaskInCloud(item, true);
+            await syncFromCloud(true);
+        }
+        async function loadDemoData() {
+            await upsertTaskInCloud({
+                title: 'Elaboración de DIA - Estación Norte',
+                description: 'Formulación de línea base ambiental y matriz de riesgos.',
+                assignee: currentUser?.email || 'Ing. Mendoza Wilson',
+                category: 'DIA', status: 'En Progreso', priority: 'Alta',
+                estimatedMinutes: 240, loggedSeconds: 3600,
+                startDate: getTodayLocalISO(), dueDate: getTodayLocalISO(),
+                subtasks: [{ id: 's1', text: 'Revisión técnica', done: true }], photos: []
+            }, true);
+            await syncFromCloud(true);
+        }
+
+        function showToast(msg, type = 'info') {
+            const el = document.createElement('div');
+            el.className = `${type === 'error' ? 'bg-rose-600' : type === 'success' ? 'bg-emerald-600' : 'bg-slate-800'} text-white px-4 py-3 rounded-xl shadow-xl text-sm font-medium pointer-events-auto`;
+            el.textContent = msg;
+            document.getElementById('toastContainer').appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
